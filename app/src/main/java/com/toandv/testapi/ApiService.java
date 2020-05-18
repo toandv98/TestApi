@@ -9,6 +9,7 @@ import androidx.core.app.JobIntentService;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import org.jsoup.Connection;
+import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 
@@ -22,6 +23,7 @@ import static com.toandv.testapi.Constants.KEY_SUBMIT;
 import static com.toandv.testapi.Constants.KEY_USER_NAME;
 import static com.toandv.testapi.Constants.KEY_VIEW_STATE;
 import static com.toandv.testapi.Constants.KEY_VIEW_STATE_GENERATOR;
+import static com.toandv.testapi.Constants.TIME_OUT;
 
 public class ApiService extends JobIntentService {
 
@@ -82,18 +84,18 @@ public class ApiService extends JobIntentService {
 
             examDoc = postDoc("http://dangky.tlu.edu.vn/cmcsoft.iu.web.info/StudentViewExamList.aspx", data3);
 
-            intent.putExtra("timetable_html", examDoc.html());
+            intent.putExtra("timetable_html", tuitionDoc.html());
             LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
 
             Log.d("aaaa", "Time: " + (System.currentTimeMillis() - f));
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (IOException e) {
+            Log.d("aaaa", "onHandleWork: " + e.getMessage());
         }
     }
 
-    private void login(String username, String password) throws IOException {
+    private boolean login(String username, String password) throws IOException {
 
-        Document form = Jsoup.connect("http://dangky.tlu.edu.vn/CMCSoft.IU.Web.info/login.aspx").get();
+        Document form = Jsoup.connect("http://dangky.tlu.edu.vn/CMCSoft.IU.Web.info/login.aspx").timeout(TIME_OUT).get();
 
         Map<String, String> data = new HashMap<>();
         data.put(KEY_VIEW_STATE, form.getElementById(KEY_VIEW_STATE).val());
@@ -104,15 +106,24 @@ public class ApiService extends JobIntentService {
         data.put(KEY_SUBMIT, "login");
 
         Connection.Response response = Jsoup.connect("http://dangky.tlu.edu.vn/CMCSoft.IU.Web.info/login.aspx")
-                .data(data).method(Connection.Method.POST).execute();
+                .data(data).method(Connection.Method.POST).timeout(TIME_OUT).execute();
         cookies = response.cookies();
+        return response.parse().select("#lblErrorInfo").text().trim().length() > 0;
     }
 
     private Document getDoc(String url) throws IOException {
-        return Jsoup.connect(url).cookies(cookies).get();
+        Document result = Jsoup.connect(url).cookies(cookies).timeout(TIME_OUT).get();
+        if (result.html().length() < 600 && result.html().contains("Trang này không tồn tại")) {
+            throw new HttpStatusException("Trang này không tồn tại", 904, url);
+        }
+        return result;
     }
 
     private Document postDoc(String url, Map<String, String> data) throws IOException {
-        return Jsoup.connect(url).cookies(cookies).data(data).post();
+        Document result = Jsoup.connect(url).cookies(cookies).data(data).timeout(TIME_OUT).post();
+        if (result.html().length() < 600 && result.html().contains("Trang này không tồn tại")) {
+            throw new HttpStatusException("Trang này không tồn tại", 904, url);
+        }
+        return result;
     }
 }
